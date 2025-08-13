@@ -1,0 +1,120 @@
+# main.kv
+# -------
+#:kivy 2.1.0
+
+<Root>:
+    orientation: "vertical"
+    padding: dp(8)
+    spacing: dp(8)
+
+    ScrollView:
+        size_hint_y: None
+        height: dp(140)
+        do_scroll_x: False
+
+        TextInput:
+            id: brief
+            hint_text: "Вставьте сюда текст брифа"
+            multiline: True
+            font_size: dp(14)
+            on_text: root.parse_brief()
+
+    Spinner:
+        id: institution
+        text: "Авто"
+        values: ["Авто"] + [inst for inst in app.root_window.children[0].INSTITUTIONS] if hasattr(app.root_window.children[0], 'INSTITUTIONS') else ["Авто"]
+        size_hint_y: None
+        height: dp(40)
+        on_text: root.parse_brief()
+
+    TextInput:
+        id: fio
+        hint_text: "ФИО"
+        multiline: False
+        size_hint_y: None
+        height: dp(40)
+        font_size: dp(14)
+        on_text: root.update_preview()
+
+    TextInput:
+        id: vk
+        hint_text: "Ссылка на ВК"
+        multiline: False
+        size_hint_y: None
+        height: dp(40)
+        font_size: dp(14)
+        on_text: root.update_preview()
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(40)
+        spacing: dp(8)
+
+        TextInput:
+            id: prepay
+            hint_text: "Предоплата (₽)"
+            multiline: False
+            font_size: dp(14)
+            on_text: root.update_preview()
+
+        TextInput:
+            id: pages
+            hint_text: "Страницы"
+            multiline: False
+            font_size: dp(14)
+            on_text: root.update_preview()
+
+        TextInput:
+            id: hours
+            hint_text: "Часы"
+            multiline: False
+            font_size: dp(14)
+            on_text: root.update_preview()
+
+    BoxLayout:
+        size_hint_y: None
+        height: dp(40)
+        spacing: dp(8)
+
+        ToggleButton:
+            text: "Цитаты"
+            state: "down" if root.citata_on else "normal"
+            on_state: root.set_citata(self.state == "down")
+
+        Button:
+            text: "Выбрать шаблон"
+            on_release: root.choose_template()
+
+        Button:
+            text: "Сброс"
+            on_release: root.reset_form()
+
+    ScrollView:
+        size_hint_y: None
+        height: dp(160)
+        do_scroll_x: False
+
+        Label:
+            text: root.preview_html
+            markup: True
+            font_size: dp(14)
+            text_size: self.width, None
+            size_hint_y: None
+            height: self.texture_size[1]
+
+    Button:
+        text: "Сохранить договор"
+        size_hint_y: None
+        height: dp(50)
+        on_release: root.generate()
+
+    ScrollView:
+        do_scroll_x: False
+
+        Label:
+            text: root.log_text
+            markup: True
+            font_size: dp(12)
+            text_size: self.width, None
+            size_hint_y: None
+            height: self.texture_size[1]

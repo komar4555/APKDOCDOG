@@ -1,0 +1,24 @@
+name: Build Kivy APK
+
+on:
+  workflow_dispatch: {}   # запуск вручную с кнопки Run workflow
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Готовый экшен со средой Buildozer (SDK/NDK внутри Docker)
+      - name: Build with Buildozer
+        uses: kivy/buildozer-action@v1
+        with:
+          command: buildozer android debug
+
+      # Сохраняем apk как артефакт
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-debug
+          path: bin/*.apk
