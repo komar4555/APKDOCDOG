@@ -1,7 +1,7 @@
 name: Build Kivy APK
 
 on:
-  workflow_dispatch: {}   # запуск вручную
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -16,7 +16,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      # Экшен, который собирает Kivy/Buildozer-проекты внутри Docker
       - name: Build with Buildozer
         uses: ArtemSBulgakov/buildozer-action@v1
         with:

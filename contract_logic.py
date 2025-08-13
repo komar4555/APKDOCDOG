@@ -1,6 +1,8 @@
 # contract_logic.py
-# -----------------
-# Основная логика парсинга и генерации DOCX.
+# Основная логика парсинга/подсчётов (без зависимостей от python-docx).
+
+import re
+from datetime import datetime
 
 INSTITUTIONS = [
     "Школа", "Детский сад", "Лицей", "Гимназия", "Прогимназия", "Интернат"
@@ -23,50 +25,37 @@ COMPLET_RANGE = [
     ("Премиум", 2800, 2900, None, 12, 20)
 ]
 
-import re
-from datetime import datetime
-
-try:
-    from docx import Document
-except ImportError:
-    Document = None
-
-
 def remove_leading_numbering(lines):
     return [re.sub(r'^\s*\d+\.\s*', '', line).strip() for line in lines]
-
 
 def parse_line_safe(lines, idx):
     return lines[idx] if idx < len(lines) else ""
 
-
 def extract_phones(line):
     phones = re.findall(r'((?:\+7|8|7)?\d{10,11})', line.replace(' ', '').replace('-', ''))
-    result = []
+    phones_fmt = []
     for p in phones:
         p = p.lstrip("+")
         if p.startswith("8"):
             p = "7" + p[1:]
         elif p.startswith("9"):
             p = "7" + p
-        result.append("+" + p if len(p) == 11 else p)
-    return list(dict.fromkeys(result))
-
+        phones_fmt.append("+" + p if len(p) == 11 else p)
+    return list(dict.fromkeys(phones_fmt))
 
 def detect_category(inst, klass, group):
     school_words = ["школа", "интернат", "прогимназия", "гимназия", "лицей"]
-    if "сад" in inst.lower():
+    if "сад" in (inst or "").lower():
         return "ДС"
-    if any(w in inst.lower() for w in school_words):
-        digits = re.findall(r'\d+', klass)
+    if any(word in (inst or "").lower() for word in school_words):
+        digits = re.findall(r'\d+', klass or "")
         if digits:
             grade = int(digits[0])
             if 1 <= grade <= 4:
                 return "МЛ"
-            elif 5 <= grade <= 11:
+            if 5 <= grade <= 11:
                 return "СТ"
     return ""
-
 
 def match_complect(price, category):
     try:
@@ -80,22 +69,16 @@ def match_complect(price, category):
             return name, pages
     return None, None
 
-
 def get_default_price(komplekt, category):
     if not komplekt or not category:
         return ""
     k = komplekt.lower()
     if category == "МЛ":
-        if "классик" in k:
-            return "2600"
-        if "премиум" in k:
-            return "2800"
-        if "планшет" in k:
-            return "1700"
-        if "минимум" in k:
-            return "2100"
+        if "классик" in k: return "2600"
+        if "премиум" in k: return "2800"
+        if "планшет" in k: return "1700"
+        if "минимум" in k: return "2100"
     return ""
-
 
 def get_hours(album_count, complect):
     try:
@@ -104,12 +87,11 @@ def get_hours(album_count, complect):
         return ""
     if complect == "Планшет":
         return 1 if n <= 20 else 2 if n <= 39 else 3
-    elif complect == "Минимум":
+    if complect == "Минимум":
         return 1 if n < 18 else 2 if n <= 28 else 3
-    elif complect in ("Классик", "Премиум"):
+    if complect in ("Классик", "Премиум"):
         return 1 if n < 18 else 2 if n <= 25 else 3
     return ""
-
 
 def round_down_to_thousand(num):
     try:
@@ -117,9 +99,8 @@ def round_down_to_thousand(num):
     except:
         return 0
 
-
 def clean_group_title(title):
-    t = title.strip()
+    t = (title or "").strip()
     t = re.sub(r'(?i)\b(группа|группы|номер|№|no\.?)\b', '', t)
     t = re.sub(r'\d+', '', t)
     t = t.replace('"', '').replace("«", '').replace("»", '').replace("'", '')
@@ -127,72 +108,125 @@ def clean_group_title(title):
     t = re.sub(r'\s{2,}', ' ', t).strip()
     return t[0].upper() + t[1:] if t else ""
 
-
 def smart_brief_lines(brief):
-    lines = [l.strip() for l in brief.strip().split('\n') if l.strip()]
+    lines = [l.strip() for l in (brief or "").strip().split('\n') if l.strip()]
     lines = remove_leading_numbering(lines)
     if len(lines) == 1:
         parts = re.split(r'[;,]', lines[0])
-        if len(parts) < 6:
-            parts = re.split(r'\s{2,}', lines[0])
-        if len(parts) < 6:
-            parts = re.split(r'\s+', lines[0])
+        if len(parts) < 6: parts = re.split(r'\s{2,}', lines[0])
+        if len(parts) < 6: parts = re.split(r'\s+', lines[0])
         lines = remove_leading_numbering([p.strip() for p in parts if p.strip()])
+    if len(lines) > 7:
+        skip = ['номер','школ','сад','учреждение','группа','класс',
+                'количество','всего','альбом','вид','цена','стоимость',
+                'телефон','ответств','фио','название']
+        result, prev = [], False
+        for line in lines:
+            lwr = line.lower()
+            if any(w in lwr for w in skip) or re.match(r'^\d+\.', lwr):
+                prev = True; continue
+            if prev or (not any(w in lwr for w in skip) and not re.match(r'^\d+\.', lwr)):
+                result.append(line); prev = False
+        if 5 <= len(result) <= 8:
+            lines = result
+        else:
+            lines2 = [line for line in lines if not (any(w in line.lower() for w in skip) or re.match(r'^\d+\.', line.lower()))]
+            if 5 <= len(lines2) <= 8: lines = lines2
     return lines
-
 
 def strict_parse_brief(brief, user_institution=None):
     lines = smart_brief_lines(brief)
-    data = {'_lines': lines}
-    # определение учреждения
-    found = False
+    data, found = {'_lines': lines}, False
+
+    # 1–3: поиск типа учреждения и номера
     for line in lines[:3]:
         lwr = line.lower()
         if re.search(r'\bдс\b', lwr) or re.search(r'\bсад\b', lwr):
             num = re.search(r'(\d+)', line)
             data['тип_учреждения'] = "Детский сад"
             data['номер_учреждения'] = num.group(1) if num else ""
-            found = True
-            break
+            found = True; break
+        if re.search(r'\b(сош|сш|средняя\s*школа)\b', lwr):
+            num = re.search(r'(\d+)', line)
+            data['тип_учреждения'] = "Школа"
+            data['номер_учреждения'] = num.group(1) if num else ""
+            found = True; break
         for ins in INSTITUTIONS:
             if ins.lower() in lwr:
                 num = re.search(r'(\d+)', line)
                 data['тип_учреждения'] = ins
                 data['номер_учреждения'] = num.group(1) if num else ""
-                found = True
-                break
-        if found:
-            break
+                found = True; break
+        if found: break
+
+    if not found:
+        if lines and re.fullmatch(r'\d+', lines[0]):
+            data['тип_учреждения'] = user_institution or "Школа"
+            data['номер_учреждения'] = lines[0]
+        elif user_institution:
+            num = re.search(r'(\d+)', lines[0]) if lines else None
+            data['тип_учреждения'] = user_institution
+            data['номер_учреждения'] = num.group(1) if num else ""
+        else:
+            data['тип_учреждения'] = ""
+            data['номер_учреждения'] = ""
+
     # класс/группа
     group_line = parse_line_safe(lines, 1)
-    group = re.search(r'(\d+)', group_line)
+    m = re.search(r'(\d+)', group_line)
+    group = m.group(1) if m else ""
     title_match = re.search(r'["«](.+?)["»]', group_line)
-    title = clean_group_title(title_match.group(1) if title_match else group_line)
-    data['класс'] = title
-    # прочее
+    title = clean_group_title(title_match.group(1) if title_match else re.sub(r'(?i)\b(группа|группы|номер|№|no\.?)\b|\d+', '', group_line))
+
+    if data.get('тип_учреждения') and "сад" in data['тип_учреждения'].lower():
+        data['класс'] = f'Группа {group} "{title}"' if title else f'Группа {group}'
+        data['номер_группы'] = group
+        data['название_группы'] = title
+    else:
+        kls = ''.join(re.findall(r'[0-9]+[А-Яа-яA-Za-zЁё]', group_line.replace(' ', '').replace('"', '')))
+        if not kls:
+            kls = ''.join(re.findall(r'[A-Za-zА-Яа-яЁё0-9]+', group_line.replace(' ', '').replace('"', '')))
+        data['класс'] = kls
+        digits_list = re.findall(r'\d+', kls)
+        data['номер_класса'] = digits_list[0] if kls and digits_list else ""
+
     digits = re.findall(r'\d+', parse_line_safe(lines, 2))
     data['кол_детей'] = digits[0] if digits else ""
+    digits = re.findall(r'\d+', parse_line_safe(lines, 3))
+    data['кол_альбомов'] = digits[0] if digits else ""
+    price_str = parse_line_safe(lines, 4).replace(' ', '')
+    price = re.search(r'(\d{3,5})', price_str)
+    data['стоимость_одного_альбома'] = price.group(1) if price else ""
+
+    # автоцена по комплекту, если цена не указана
+    komplekt = ""
+    if not data['стоимость_одного_альбома']:
+        for k in ["классик", "премиум", "планшет", "минимум"]:
+            if k in price_str.lower():
+                komplekt = k.capitalize()
+                break
+        data['стоимость_одного_альбома'] = get_default_price(
+            komplekt,
+            detect_category(data.get('тип_учреждения',''), data.get('класс',''), data.get('номер_группы',''))
+        )
+        data['комплект'] = komplekt
+
+    tel_line = parse_line_safe(lines, 5)
+    all_phones = []
+    for l in lines:
+        all_phones += extract_phones(l)
+    data['телефон'] = ", ".join(all_phones)
+    fio = lines[6].strip() if len(lines) >= 7 and lines[6].strip() else re.sub(r'\d+|\+7|8|7', '', tel_line).strip(", .")
+    data['фамилия'] = fio
+
+    if (data.get('тип_учреждения','').lower() in ['школа','лицей','гимназия','прогимназия','интернат']):
+        data['когдасъёмка'] = "Съёмка в студии проходит в будние дни."
+    elif data.get('тип_учреждения','').lower().find('сад') != -1:
+        data['когдасъёмка'] = "Съёмка в студии проходит в выходные дни."
+    else:
+        data['когдасъёмка'] = ""
+
+    data['дата'] = datetime.now().strftime("%d %B %Y г.")
+    data['номер_договора'] = datetime.now().strftime("%d%m%y")
+    data['класс_for_file'] = (data['класс'].replace("Группа", "").replace('"','').replace("«",'').replace("»",'').replace("'",'').strip().upper() if data.get('класс') else "")
     return data
-
-
-def replace_in_para(paragraph, target, replacement):
-    full_text = ''.join(run.text for run in paragraph.runs)
-    if target not in full_text:
-        return
-    new_text = full_text.replace(target, replacement.strip())
-    for run in paragraph.runs:
-        run.text = ''
-    if paragraph.runs:
-        paragraph.runs[0].text = new_text
-
-
-def replace_all(doc, values):
-    for para in doc.paragraphs:
-        for key, val in values.items():
-            replace_in_para(para, f"{{{key}}}", str(val))
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for key, val in values.items():
-                    for p in cell.paragraphs:
-                        replace_in_para(p, f"{{{key}}}", str(val))

@@ -1,6 +1,4 @@
-# main.py
-# -------
-# Главный файл приложения на Kivy
+# main.py — Kivy-приложение (Android/ПК). Генерация .docx через docx_simple.
 
 from kivy.app import App
 from kivy.lang import Builder
@@ -19,9 +17,8 @@ from contract_logic import (
     match_complect,
     get_hours,
     round_down_to_thousand,
-    replace_all,
-    Document,
 )
+from docx_simple import replace_in_docx
 
 try:
     from plyer import filechooser, sharing
@@ -65,7 +62,8 @@ class Root(BoxLayout):
         self.load_last_template()
         self.load_last_save_dir()
         self.template_status = (
-            f"✅ Шаблон: {os.path.basename(self.template_path)}" if self.template_path and os.path.exists(self.template_path)
+            f"✅ Шаблон: {os.path.basename(self.template_path)}"
+            if self.template_path and os.path.exists(self.template_path)
             else "❌ Шаблон не выбран"
         )
         self.parse_brief()
@@ -151,6 +149,9 @@ class Root(BoxLayout):
         compl = d.get('комплект','')
         if d.get('тип_учреждения','') and d.get('номер_учреждения',''):
             inst_line = f"Учреждение: [b]{d.get('тип_учреждения','')} №{d.get('номер_учреждения','')}[/b]"
+        elif d.get('тип_учреждения','') or d.get('номер_учреждения',''):
+            txt = d.get('тип_учреждения','') or d.get('номер_учреждения','')
+            inst_line = f"Учреждение: [color=#ff4444][b]{txt} (неполные данные)[/b][/color]"
         else:
             inst_line = "Учреждение: [color=#ff4444][b]не определено![/b][/color]"
 
@@ -178,34 +179,42 @@ class Root(BoxLayout):
         pages = self.ids.pages.text or (d.get('страницы_комплекта') or "")
         hours = self.ids.hours.text or (d.get('часы') or "")
         fio = self.ids.fio.text or d.get('фамилия','')
+        vk = self.ids.vk.text
 
-        fname = f"{d.get('номер_учреждения','')} {d.get('класс','')} {d.get('кол_альбомов','')} {base_price}.docx".upper()
+        if cat == "ДС":
+            klass_for_file = d.get('номер_группы','')
+        else:
+            klass_for_file = d.get('класс_for_file','')
+        fname = f"{d.get('номер_учреждения','')} {klass_for_file} {d.get('кол_альбомов','')} {base_price}.docx" \
+            .replace('  ', ' ').replace('""','').replace(' .','.').replace('..','.')
+        fname = fname.upper()
 
-        self.preview_html = "\n".join([
+        lines = [
             inst_line,
             f"Класс/Группа: [b]{d.get('класс','')}[/b]",
             f"Категория: [b]{cat}[/b]" if cat else "",
             f"Комплект: [b]{compl}[/b]" if compl else "",
             f"Кол-во детей: [b]{d.get('кол_детей','')}[/b]",
             f"Кол-во альбомов: [b]{d.get('кол_альбомов','')}[/b]",
-            f"Стоимость одного альбома: [b]{price}[/b]",
+            f"Стоимость одного альбома: [b]{price}[/b]" + (" (с цитатами)" if self.citata_on else ""),
             f"Количество страниц: [b]{pages}[/b]",
             f"Количество часов: [b]{hours}[/b]",
             f"ФИО: [b]{fio}[/b]",
+            f"Телефон: [b]{d.get('телефон','')}[/b]",
+            (f"VK: [b]{vk}[/b]" if vk else ""),
             f"Общая сумма: [b]{total}[/b]",
             f"Предоплата: [b]{prepay_val}[/b]",
             f"Остаток: [b]{rest}[/b]",
             f"Дата: [b]{self.date_text}[/b]",
             f"Название файла: [color=#2c73d2][b]{fname}[/b][/color]",
-        ])
+        ]
+        self.preview_html = "\n".join([s for s in lines if s])
 
     def generate(self):
         if not self.template_path or not os.path.exists(self.template_path):
             self.log("❗ Шаблон не выбран")
             return
-        if Document is None:
-            self.log("❗ Модуль python-docx недоступен")
-            return
+
         d = self.brief_data or {}
         try:
             base_price = int(d.get('стоимость_одного_альбома','') or 0)
@@ -227,6 +236,11 @@ class Root(BoxLayout):
                 prepay_val = round_down_to_thousand(total * 0.3)
         rest = total - prepay_val
 
+        fio = self.ids.fio.text or d.get('фамилия','')
+        vk = self.ids.vk.text
+        pages = self.ids.pages.text or (d.get('страницы_комплекта') or "")
+        hours = self.ids.hours.text or (d.get('часы') or "")
+
         values = {
             "учреждение": f"{d.get('тип_учреждения','')} №{d.get('номер_учреждения','')}".strip(),
             "класс": d.get("класс", ""),
@@ -236,44 +250,59 @@ class Root(BoxLayout):
             "общая_сумма": total,
             "предоплата": prepay_val,
             "остаток": rest,
-            "фамилия": self.ids.fio.text or d.get('фамилия',''),
+            "фамилия": fio,
             "телефон": d.get("телефон", ""),
-            "ссылка_ВК": self.ids.vk.text,
-            "кол_страниц": self.ids.pages.text or (d.get('страницы_комплекта') or ""),
-            "колвочасов": self.ids.hours.text or (d.get('часы') or ""),
+            "ссылка_ВК": vk,
+            "кол_страниц": pages,
+            "колвочасов": hours,
             "дата": self.date_text,
             "номер_договора": d.get("номер_договора", ""),
             "когдасъёмка": d.get("когдасъёмка", ""),
             "ц": ", Цитаты" if self.citata_on else ""
         }
 
-        short_name = f"{d.get('номер_учреждения','')} {d.get('класс','')} {d.get('кол_альбомов','')} {base_price}.docx".upper()
+        cat = d.get('категория','')
+        klass_for_file = d.get('номер_группы','') if cat == "ДС" else d.get('класс_for_file','')
+        short_name = f"{d.get('номер_учреждения','')} {klass_for_file} {d.get('кол_альбомов','')} {base_price}.docx" \
+            .replace('  ', ' ').replace('""','').replace(' .','.').replace('..','.')
+        short_name = short_name.upper()
 
         def _save_to(selection):
             if not selection:
                 return
             path = selection[0]
-            doc = Document(self.template_path)
-            replace_all(doc, values)
-            doc.save(path)
-            self.log(f"✅ Договор сохранён: {path}")
-            if sharing:
-                sharing.share(file_path=path)
+            try:
+                replace_in_docx(self.template_path, path, values)
+                try:
+                    with open(CONFIG_SAVE_DIR_FILE, 'w', encoding='utf-8') as f:
+                        f.write(os.path.dirname(path))
+                except Exception:
+                    pass
+                self.log(f"✅ Договор сохранён: {path}")
+                try:
+                    if sharing:
+                        sharing.share(file_path=path)
+                except Exception:
+                    pass
+            except Exception as e:
+                self.log(f"❗ Ошибка: {e}")
 
         if filechooser:
-            filechooser.save_file(on_selection=_save_to, filename=short_name)
+            try:
+                filechooser.save_file(on_selection=_save_to, filename=short_name)
+            except Exception as e:
+                self.log(f"❗ Ошибка сохранения: {e}")
         else:
             path = os.path.abspath(short_name)
-            doc = Document(self.template_path)
-            replace_all(doc, values)
-            doc.save(path)
-            self.log(f"✅ Договор сохранён: {path}")
-
+            try:
+                replace_in_docx(self.template_path, path, values)
+                self.log(f"✅ Договор сохранён: {path}")
+            except Exception as e:
+                self.log(f"❗ Ошибка: {e}")
 
 class ContractKivyApp(App):
     def build(self):
         return Builder.load_file("main.kv")
-
 
 if __name__ == "__main__":
     ContractKivyApp().run()

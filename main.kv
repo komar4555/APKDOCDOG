@@ -1,5 +1,4 @@
 # main.kv
-# -------
 #:kivy 2.1.0
 
 <Root>:
@@ -7,11 +6,25 @@
     padding: dp(8)
     spacing: dp(8)
 
+    BoxLayout:
+        size_hint_y: None
+        height: dp(36)
+        spacing: dp(6)
+        Button:
+            text: "📁 Шаблон"
+            size_hint_x: None
+            width: dp(120)
+            on_release: root.choose_template()
+        Label:
+            text: root.template_status
+            halign: "left"
+            valign: "middle"
+            text_size: self.size
+
     ScrollView:
         size_hint_y: None
         height: dp(140)
         do_scroll_x: False
-
         TextInput:
             id: brief
             hint_text: "Вставьте сюда текст брифа"
@@ -22,79 +35,58 @@
     Spinner:
         id: institution
         text: "Авто"
-        values: ["Авто"] + [inst for inst in app.root_window.children[0].INSTITUTIONS] if hasattr(app.root_window.children[0], 'INSTITUTIONS') else ["Авто"]
+        values: ("Авто","Школа","Детский сад","Лицей","Гимназия","Прогимназия","Интернат")
         size_hint_y: None
         height: dp(40)
         on_text: root.parse_brief()
 
-    TextInput:
-        id: fio
-        hint_text: "ФИО"
-        multiline: False
+    GridLayout:
+        cols: 2
         size_hint_y: None
-        height: dp(40)
-        font_size: dp(14)
-        on_text: root.update_preview()
+        row_default_height: dp(40)
+        row_force_default: True
 
-    TextInput:
-        id: vk
-        hint_text: "Ссылка на ВК"
-        multiline: False
-        size_hint_y: None
-        height: dp(40)
-        font_size: dp(14)
-        on_text: root.update_preview()
+        Label: text: "ФИО:"; halign: "right"; valign: "middle"; text_size: self.size
+        TextInput: id: fio; on_text: root.update_preview()
+
+        Label: text: "VK:"; halign: "right"; valign: "middle"; text_size: self.size
+        TextInput: id: vk; on_text: root.update_preview()
+
+        Label: text: "Предоплата:"; halign: "right"; valign: "middle"; text_size: self.size
+        TextInput: id: prepay; input_filter: "int"; on_text: root.update_preview()
+
+        Label: text: "Страницы:"; halign: "right"; valign: "middle"; text_size: self.size
+        TextInput: id: pages; on_text: root.update_preview()
+
+        Label: text: "Часы:"; halign: "right"; valign: "middle"; text_size: self.size
+        TextInput: id: hours; on_text: root.update_preview()
+
+        Label: text: "Дата:"; halign: "right"; valign: "middle"; text_size: self.size
+        TextInput: text: root.date_text; on_text: root.update_preview()
 
     BoxLayout:
         size_hint_y: None
         height: dp(40)
         spacing: dp(8)
-
-        TextInput:
-            id: prepay
-            hint_text: "Предоплата (₽)"
-            multiline: False
-            font_size: dp(14)
-            on_text: root.update_preview()
-
-        TextInput:
-            id: pages
-            hint_text: "Страницы"
-            multiline: False
-            font_size: dp(14)
-            on_text: root.update_preview()
-
-        TextInput:
-            id: hours
-            hint_text: "Часы"
-            multiline: False
-            font_size: dp(14)
-            on_text: root.update_preview()
-
-    BoxLayout:
-        size_hint_y: None
-        height: dp(40)
-        spacing: dp(8)
-
         ToggleButton:
             text: "Цитаты"
             state: "down" if root.citata_on else "normal"
             on_state: root.set_citata(self.state == "down")
-
-        Button:
-            text: "Выбрать шаблон"
-            on_release: root.choose_template()
-
         Button:
             text: "Сброс"
             on_release: root.reset_form()
 
+    Label:
+        text: "📄 Предпросмотр данных:"
+        size_hint_y: None
+        height: dp(24)
+
     ScrollView:
         size_hint_y: None
-        height: dp(160)
+        height: dp(180)
         do_scroll_x: False
-
         Label:
+            id: preview
             text: root.preview_html
             markup: True
             font_size: dp(14)
@@ -103,18 +95,21 @@
             height: self.texture_size[1]
 
     Button:
-        text: "Сохранить договор"
+        text: "Сформировать договор"
         size_hint_y: None
-        height: dp(50)
+        height: dp(48)
         on_release: root.generate()
+
+    Label:
+        text: "📋 Лог:"
+        size_hint_y: None
+        height: dp(24)
 
     ScrollView:
         do_scroll_x: False
-
-        Label:
+        TextInput:
+            id: log
             text: root.log_text
-            markup: True
-            font_size: dp(12)
-            text_size: self.width, None
+            readonly: True
             size_hint_y: None
-            height: self.texture_size[1]
+            height: max(self.minimum_height, dp(120))
